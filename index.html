@@ -1,0 +1,1001 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>One HR — OR Simulation</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
+html,body{height:100%;font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;background:#EFF3F8;color:#1a1a1a;overflow-x:hidden;}
+:root{
+  --blue:#00A9E0;--blue-dk:#0087b3;--blue-dp:#005f80;
+  --gray:#757880;--gray-dk:#53565A;--gray-lt:#9a9da1;
+  --yellow:#FED141;--yellow-dk:#c9a320;
+  --green:#2D6A2A;--red:#9C0006;
+  --white:#ffffff;--dark:#1a1a1a;
+}
+.screen{display:none;flex-direction:column;min-height:100vh;animation:fadeUp .35s ease both;}
+.screen.active{display:flex;}
+@keyframes fadeUp{from{opacity:0;transform:translateY(12px);}to{opacity:1;transform:translateY(0);}}
+
+/* HEADER */
+.hdr{background:var(--gray-dk);color:#fff;padding:12px 18px 10px;position:sticky;top:0;z-index:200;box-shadow:0 2px 8px rgba(0,0,0,.22);}
+.hdr-top{display:flex;justify-content:space-between;align-items:center;}
+.hdr-title{font-size:15px;font-weight:700;letter-spacing:.01em;}
+.hdr-pt{font-size:12px;background:rgba(255,255,255,.15);padding:3px 10px;border-radius:20px;}
+.stage-bar{display:flex;gap:5px;margin-top:8px;align-items:center;}
+.sdot{flex:1;height:5px;border-radius:3px;background:rgba(255,255,255,.2);transition:background .4s;}
+.sdot.done{background:rgba(255,255,255,.45);}
+.sdot.active{background:var(--yellow);}
+.stage-lbl{font-size:11px;color:rgba(255,255,255,.5);margin-left:6px;white-space:nowrap;font-family:'Courier New',monospace;}
+
+/* VITALS */
+.vitals-bar{background:#0a1a24;border-bottom:3px solid var(--blue);display:flex;position:sticky;top:68px;z-index:199;}
+.vt{flex:1;padding:6px 5px;border-right:1px solid rgba(255,255,255,.07);text-align:center;}
+.vt:last-child{border-right:none;}
+.vt-lbl{font-size:8px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:rgba(255,255,255,.35);margin-bottom:1px;}
+.vt-val{font-size:13px;font-weight:700;font-family:'Courier New',monospace;transition:color .8s;}
+.v-ok{color:#6ee09a;} .v-warn{color:#FED141;} .v-crit{color:#ff6b6b;} .v-dim{color:rgba(255,255,255,.25);}
+@keyframes vblink{0%,100%{opacity:1}50%{opacity:.35}}
+.v-crit{animation:vblink 1.1s ease-in-out infinite;}
+
+/* CONTENT */
+.content{flex:1;padding:16px;max-width:760px;width:100%;margin:0 auto;padding-bottom:40px;}
+
+/* STAGE BANNER */
+.stage-banner{border-radius:12px;padding:14px 18px;margin-bottom:14px;}
+.sb-num{font-size:11px;font-weight:700;color:rgba(255,255,255,.65);letter-spacing:.06em;margin-bottom:3px;}
+.stage-banner h2{font-size:20px;font-weight:800;color:#fff;margin:0;}
+
+/* CARDS */
+.card{background:#fff;border-radius:12px;padding:18px;margin-bottom:12px;box-shadow:0 1px 5px rgba(0,0,0,.08);}
+.card-lbl{font-size:10px;font-weight:700;letter-spacing:.09em;text-transform:uppercase;color:var(--gray-lt);margin-bottom:10px;}
+
+/* DRAG AND DROP */
+.tiles-pool{display:flex;flex-wrap:wrap;gap:8px;padding:14px;background:#f0f4f8;border-radius:10px;min-height:56px;}
+.tile{
+  background:#fff;border:2px solid #dde4ef;border-radius:8px;
+  padding:10px 14px;font-size:13.5px;font-weight:600;color:var(--dark);
+  cursor:grab;user-select:none;
+  transition:border-color .15s,box-shadow .15s,opacity .2s,transform .1s;
+}
+.tile:hover{border-color:var(--blue);box-shadow:0 2px 8px rgba(0,169,224,.18);transform:translateX(2px);}
+.tile.dragging{opacity:.35;cursor:grabbing;}
+.tile.used{opacity:.3;pointer-events:none;}
+
+.slots{display:flex;flex-direction:column;gap:8px;margin-bottom:12px;}
+.slot{
+  display:flex;align-items:center;gap:10px;
+  background:#f8f9fc;border:2px dashed #c8d2e0;
+  border-radius:10px;padding:10px 14px;min-height:52px;
+  transition:border-color .2s,background .2s;
+}
+.slot.drag-over{border-color:var(--blue);background:#e8f6fc;}
+.slot.has-tile{border-style:solid;border-color:#b8cad8;background:#fff;}
+.slot.drag-over-swap{border-color:var(--yellow);background:#fffbea;}
+.slot-num{font-size:13px;font-weight:800;color:var(--blue);min-width:20px;font-family:'Courier New',monospace;}
+.slot-label{flex:1;font-size:14px;font-weight:600;color:var(--dark);}
+.slot-empty{flex:1;font-size:13px;color:#bbb;font-style:italic;}
+.slot-drag-handle{font-size:16px;color:#c0ccd8;cursor:grab;padding:2px 4px;user-select:none;line-height:1;}
+.slot-drag-handle:active{cursor:grabbing;}
+.slot-x{font-size:16px;color:#ccc;cursor:pointer;padding:2px 6px;border-radius:4px;line-height:1;background:none;border:none;font-family:inherit;}
+.slot-x:hover{color:var(--red);background:#fff0f0;}
+
+/* ATTEMPT DOTS */
+.attempt-row{display:flex;gap:6px;align-items:center;font-size:12px;color:var(--gray-lt);margin-bottom:12px;font-family:'Courier New',monospace;}
+.adot{width:10px;height:10px;border-radius:50%;background:#dde4ef;display:inline-block;transition:background .3s;}
+.adot.used{background:var(--red);}
+
+/* BUTTONS */
+.btn-primary{width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:16px;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit;letter-spacing:.01em;transition:background .15s,transform .1s;}
+.btn-primary:hover{background:var(--blue-dk);}
+.btn-primary:active{transform:scale(.99);}
+.btn-primary:disabled{background:#b0c4d0;cursor:default;transform:none;}
+
+/* FEEDBACK */
+.feedback-box{border-radius:10px;padding:14px 16px;margin-bottom:14px;border-left:4px solid;font-size:14px;line-height:1.7;display:none;}
+.feedback-box.show{display:block;}
+.fb-correct{background:#f0fbf4;border-color:#2D6A2A;color:#1a4a18;}
+.fb-wrong{background:#fff5f5;border-color:#9C0006;color:#5a1212;}
+.fb-strong{font-weight:700;margin-bottom:6px;font-size:15px;}
+
+/* INTERSTITIAL — take action screen */
+.interstitial{display:none;flex-direction:column;min-height:100vh;animation:fadeUp .35s ease both;}
+.interstitial.active{display:flex;}
+.action-hero{
+  background:var(--green);color:#fff;
+  padding:40px 24px 32px;text-align:center;
+  flex:1;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;
+}
+.action-icon{font-size:56px;margin-bottom:18px;}
+.action-title{font-size:28px;font-weight:800;margin-bottom:12px;line-height:1.2;}
+.action-body{font-size:17px;color:rgba(255,255,255,.85);line-height:1.7;max-width:440px;margin:0 auto 32px;}
+.action-btn{
+  background:#fff;color:var(--green);border:none;
+  border-radius:12px;padding:18px 32px;
+  font-size:17px;font-weight:800;cursor:pointer;
+  font-family:inherit;letter-spacing:.01em;
+  transition:opacity .15s,transform .1s;
+  box-shadow:0 4px 16px rgba(0,0,0,.15);
+}
+.action-btn:hover{opacity:.9;}
+.action-btn:active{transform:scale(.98);}
+
+/* REVEAL — answer shown screen */
+.reveal-box{
+  border-radius:12px;overflow:hidden;margin-bottom:14px;
+  border:2px solid #9C0006;
+}
+.reveal-hdr{
+  background:#9C0006;padding:14px 18px;
+}
+.reveal-hdr p{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:3px;}
+.reveal-hdr h3{font-size:16px;font-weight:700;color:#fff;margin:0;}
+.reveal-body{padding:16px 18px;background:#fff5f5;}
+.reveal-step{
+  display:flex;align-items:center;gap:10px;
+  padding:9px 0;border-bottom:1px solid #f0d0d0;
+  font-size:14px;
+}
+.reveal-step:last-child{border-bottom:none;}
+.reveal-num{font-size:12px;font-weight:800;color:#9C0006;min-width:22px;font-family:'Courier New',monospace;}
+.reveal-text{font-weight:600;color:var(--dark);}
+.reveal-note{font-size:13.5px;color:#5a1212;line-height:1.65;padding:12px 14px;background:#ffebeb;border-radius:8px;margin-top:10px;font-style:italic;}
+
+/* POWER OUTAGE */
+#outage-overlay{display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:#000;z-index:9999;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:32px 24px;overflow-y:auto;}
+#outage-overlay.show{display:flex;}
+.outage-stop{
+  font-size:42px;font-weight:900;color:#ff2222;
+  letter-spacing:.04em;margin-bottom:10px;
+  text-shadow:0 0 30px rgba(255,34,34,.6);
+  line-height:1.1;
+}
+@keyframes pulse-stop{0%,100%{opacity:1;text-shadow:0 0 30px rgba(255,34,34,.6)}50%{opacity:.8;text-shadow:0 0 50px rgba(255,34,34,.9)}}
+.outage-stop{animation:pulse-stop 1s ease-in-out infinite;}
+.outage-surgeon{
+  font-size:17px;font-weight:700;color:var(--yellow);
+  background:rgba(254,209,65,.12);border:1.5px solid rgba(254,209,65,.4);
+  border-radius:8px;padding:8px 18px;margin-bottom:22px;
+  letter-spacing:.02em;
+}
+.outage-script{
+  background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.12);
+  border-radius:12px;padding:20px 22px;max-width:480px;width:100%;
+  margin-bottom:22px;text-align:left;
+}
+.outage-script p{
+  font-size:17px;color:rgba(255,255,255,.9);line-height:1.75;
+  margin-bottom:14px;
+}
+.outage-script p:last-child{margin-bottom:0;}
+.outage-role{
+  font-weight:800;color:var(--yellow);font-size:18px;
+}
+.outage-key{
+  font-weight:800;color:#ff6666;
+  text-decoration:underline;text-decoration-color:rgba(255,102,102,.4);
+}
+.outage-timer{font-family:'Courier New',monospace;font-size:52px;font-weight:700;color:var(--yellow);letter-spacing:.06em;margin-bottom:6px;}
+.outage-sub{font-size:11px;color:rgba(255,255,255,.35);letter-spacing:.06em;text-transform:uppercase;margin-bottom:8px;}
+.power-restore{font-size:20px;font-weight:700;color:#6ee09a;margin-top:16px;display:none;padding:14px 24px;background:rgba(110,224,154,.1);border-radius:10px;border:1px solid rgba(110,224,154,.3);}
+@keyframes pop-in{from{opacity:0;transform:scale(.92)}to{opacity:1;transform:scale(1)}}
+.power-restore.show{display:block;animation:pop-in .5s ease both;}
+
+/* INTRO */
+.intro-bay{width:100%;height:195px;overflow:hidden;}
+.intro-bay svg{width:100%;height:100%;}
+.intro-card-wrap{padding:0 16px 28px;}
+.intro-card{margin-top:-38px;position:relative;z-index:2;background:var(--gray-dk);border-radius:16px;padding:24px 20px 26px;color:#fff;text-align:center;box-shadow:0 4px 20px rgba(0,0,0,.22);}
+.intro-divider{width:40px;height:3px;background:var(--yellow);border-radius:2px;margin:8px auto 16px;}
+.intro-title{font-size:25px;font-weight:800;color:#fff;}
+.intro-sub{font-size:14px;color:rgba(255,255,255,.7);line-height:1.6;margin-bottom:18px;}
+.intro-rules{text-align:left;background:rgba(255,255,255,.09);border-radius:10px;padding:13px 16px;margin-bottom:18px;}
+.intro-rules li{font-size:13.5px;line-height:1.65;margin-bottom:5px;color:rgba(255,255,255,.85);padding-left:4px;list-style:none;}
+.intro-rules li::before{content:"→ ";color:var(--yellow);font-weight:700;}
+.team-input{width:100%;padding:13px;border-radius:10px;border:none;font-size:15px;font-family:inherit;text-align:center;margin-bottom:12px;color:var(--gray-dk);font-weight:600;background:#fff;}
+.team-input::placeholder{color:#aaa;font-weight:400;}
+.start-btn{width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:16px;font-size:18px;font-weight:800;cursor:pointer;font-family:inherit;letter-spacing:.01em;}
+
+/* SUMMARY */
+.summary-hero{background:var(--gray-dk);border-radius:14px;padding:24px 20px;color:#fff;text-align:center;margin-bottom:14px;}
+.sum-icon{font-size:44px;margin-bottom:10px;}
+.sum-title{font-size:22px;font-weight:800;margin-bottom:6px;}
+.sum-sub{font-size:13px;color:rgba(255,255,255,.6);line-height:1.5;margin-bottom:12px;}
+.sum-time{font-size:52px;font-weight:800;color:var(--yellow);font-family:'Courier New',monospace;margin-bottom:4px;}
+.sum-time-lbl{font-size:11px;color:rgba(255,255,255,.45);letter-spacing:.07em;text-transform:uppercase;}
+.outcome-card{border-radius:12px;overflow:hidden;margin-bottom:12px;}
+.outcome-hdr{padding:13px 18px;}
+.outcome-hdr p{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:rgba(255,255,255,.65);margin-bottom:2px;}
+.outcome-hdr h3{font-size:17px;font-weight:700;color:#fff;margin:0;}
+.outcome-body{padding:16px 18px;font-size:14.5px;line-height:1.7;color:#2a2a2a;background:#fff;border:1.5px solid #e0e0e0;border-top:none;}
+.breakdown-row{display:flex;justify-content:space-between;align-items:center;padding:9px 0;border-bottom:1px solid #eee;font-size:13.5px;}
+.breakdown-row:last-child{border-bottom:none;}
+.br-lbl{color:#555;}
+.br-val{font-weight:700;font-family:'Courier New',monospace;color:var(--blue);}
+.br-val.penalty{color:var(--red);}
+.debrief-box{background:#fffbea;border:1.5px solid var(--yellow);border-radius:10px;padding:14px 16px;margin-bottom:14px;}
+.debrief-lbl{font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--yellow-dk);margin-bottom:8px;}
+.debrief-q{font-size:14.5px;line-height:1.7;color:var(--dark);}
+.restart-btn{width:100%;background:var(--blue);color:#fff;border:none;border-radius:12px;padding:14px;font-size:15px;font-weight:600;cursor:pointer;font-family:inherit;margin-top:4px;}
+.restart-btn:hover{background:var(--blue-dk);}
+</style>
+</head>
+<body>
+
+<!-- POWER OUTAGE OVERLAY -->
+<div id="outage-overlay">
+  <div class="outage-stop">⚡ STOP ALL WORK</div>
+  <div class="outage-surgeon">Surgeon — read this to your team now</div>
+  <div class="outage-script">
+    <p>The power has gone out in the OR.<br>Ms. Rivera cannot breathe on her own.<br>We need to act immediately.</p>
+    <p><span class="outage-role">Surgical Tech</span> — locate the <span class="outage-key">RED BAG</span> and bring it to the OR now.</p>
+    <p>Attach the <span class="outage-key">respirator pump</span> to Ms. Rivera's mask.</p>
+    <p>Begin <span class="outage-key">manual assisted breathing</span> and do not stop until the power comes back on.</p>
+  </div>
+  <div class="outage-timer" id="outage-timer">1:30</div>
+  <div class="outage-sub">Power restoration estimated</div>
+  <div class="power-restore" id="power-restore">✓ Power restored — you may continue your work</div>
+</div>
+
+<!-- ════════════════════════════
+     INTRO
+════════════════════════════ -->
+<div class="screen active" id="screen-intro">
+  <div class="intro-bay">
+    <svg viewBox="0 0 800 195" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid slice">
+      <defs>
+        <linearGradient id="gsky" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#b8cfe8"/><stop offset="100%" stop-color="#ddeaf3"/></linearGradient>
+        <linearGradient id="ggnd" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#9aafb8"/><stop offset="100%" stop-color="#7a9098"/></linearGradient>
+        <linearGradient id="gbld" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="#e8edf2"/><stop offset="100%" stop-color="#d0d8e0"/></linearGradient>
+        <linearGradient id="gamb" x1="0" y1="0" x2="1" y2="0"><stop offset="0%" stop-color="#e0e4e8"/><stop offset="100%" stop-color="#f5f5f5"/></linearGradient>
+        <clipPath id="gclip"><rect x="0" y="0" width="800" height="195"/></clipPath>
+      </defs>
+      <g clip-path="url(#gclip)">
+        <rect x="0" y="0" width="800" height="195" fill="url(#gsky)"/>
+        <rect x="0" y="48" width="118" height="147" fill="#cdd6de" opacity=".5"/>
+        <rect x="8" y="58" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="34" y="58" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="60" y="58" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="672" y="42" width="128" height="153" fill="#cdd6de" opacity=".47"/>
+        <rect x="682" y="52" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="710" y="52" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="738" y="52" width="18" height="22" rx="1" fill="#a8c4d4" opacity=".5"/>
+        <rect x="100" y="14" width="600" height="181" fill="url(#gbld)"/>
+        <rect x="100" y="14" width="600" height="6" fill="#c8d2dc"/>
+        <rect x="100" y="74" width="600" height="4" fill="#c0cad4"/>
+        <rect x="120" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".64"/>
+        <rect x="163" y="22" width="32" height="38" rx="2" fill="#9ac0d4" opacity=".58"/>
+        <rect x="206" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".64"/>
+        <rect x="249" y="22" width="32" height="38" rx="2" fill="#a4c8d8" opacity=".54"/>
+        <rect x="292" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".60"/>
+        <rect x="466" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".64"/>
+        <rect x="509" y="22" width="32" height="38" rx="2" fill="#9ac0d4" opacity=".58"/>
+        <rect x="552" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".64"/>
+        <rect x="595" y="22" width="32" height="38" rx="2" fill="#a4c8d8" opacity=".54"/>
+        <rect x="638" y="22" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".60"/>
+        <rect x="120" y="82" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".52"/>
+        <rect x="163" y="82" width="32" height="38" rx="2" fill="#9ac0d4" opacity=".48"/>
+        <rect x="206" y="82" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".52"/>
+        <rect x="466" y="82" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".52"/>
+        <rect x="509" y="82" width="32" height="38" rx="2" fill="#9ac0d4" opacity=".48"/>
+        <rect x="552" y="82" width="32" height="38" rx="2" fill="#8ab4c8" opacity=".52"/>
+        <rect x="595" y="82" width="32" height="38" rx="2" fill="#a4c8d8" opacity=".44"/>
+        <rect x="325" y="78" width="150" height="28" rx="4" fill="#cc2200"/>
+        <rect x="328" y="81" width="144" height="22" rx="3" fill="#dd2800"/>
+        <text x="400" y="97" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="800" fill="#fff" letter-spacing="2">EMERGENCY</text>
+        <rect x="265" y="106" width="270" height="13" fill="#3a4450"/>
+        <rect x="265" y="104" width="270" height="5" fill="#00A9E0" opacity=".9"/>
+        <rect x="265" y="109" width="270" height="10" fill="#2a3440" opacity=".65"/>
+        <rect x="270" y="119" width="7" height="76" fill="#3a4450"/>
+        <rect x="523" y="119" width="7" height="76" fill="#3a4450"/>
+        <rect x="305" y="119" width="88" height="76" fill="#b0bcc8" opacity=".4"/>
+        <rect x="305" y="119" width="88" height="76" fill="none" stroke="#8a9aaa" stroke-width="1.5"/>
+        <line x1="349" y1="119" x2="349" y2="195" stroke="#8a9aaa" stroke-width="1"/>
+        <rect x="407" y="119" width="88" height="76" fill="#b8c4d0" opacity=".36"/>
+        <rect x="407" y="119" width="88" height="76" fill="none" stroke="#8a9aaa" stroke-width="1.5"/>
+        <line x1="451" y1="119" x2="451" y2="195" stroke="#8a9aaa" stroke-width="1"/>
+        <rect x="0" y="166" width="800" height="29" fill="url(#ggnd)"/>
+        <rect x="284" y="168" width="8" height="15" fill="#FED141" opacity=".6"/>
+        <rect x="306" y="168" width="8" height="15" fill="#FED141" opacity=".6"/>
+        <rect x="486" y="168" width="8" height="15" fill="#FED141" opacity=".6"/>
+        <rect x="508" y="168" width="8" height="15" fill="#FED141" opacity=".6"/>
+        <rect x="136" y="140" width="136" height="55" rx="5" fill="url(#gamb)"/>
+        <rect x="136" y="148" width="38" height="47" rx="4" fill="#dce0e4"/>
+        <rect x="140" y="152" width="28" height="28" rx="3" fill="#a8c4d8" opacity=".8"/>
+        <rect x="136" y="161" width="136" height="10" fill="#00A9E0" opacity=".85"/>
+        <rect x="198" y="146" width="20" height="6" rx="2" fill="#cc2200"/>
+        <rect x="204" y="141" width="9" height="16" rx="2" fill="#cc2200"/>
+        <rect x="254" y="144" width="18" height="48" rx="2" fill="#d4d8dc"/>
+        <line x1="263" y1="144" x2="263" y2="192" stroke="#b0b8c0" stroke-width="1"/>
+        <circle cx="168" cy="193" r="11" fill="#222"/>
+        <circle cx="168" cy="193" r="5" fill="#777"/>
+        <circle cx="250" cy="193" r="11" fill="#222"/>
+        <circle cx="250" cy="193" r="5" fill="#777"/>
+        <rect x="176" y="137" width="42" height="7" rx="3" fill="#cc2200"/>
+        <rect x="184" y="135" width="9" height="5" rx="1" fill="#ff4422" opacity=".8"/>
+        <rect x="199" y="135" width="9" height="5" rx="1" fill="#4488ff" opacity=".8"/>
+        <rect x="0" y="0" width="60" height="195" fill="url(#gsky)" opacity=".4"/>
+        <rect x="740" y="0" width="60" height="195" fill="url(#gsky)" opacity=".4"/>
+        <rect x="0" y="155" width="800" height="40" fill="#000" opacity=".06"/>
+      </g>
+    </svg>
+  </div>
+  <div class="intro-card-wrap">
+    <div class="intro-card">
+      <div class="intro-title">OR Simulation</div>
+      <div class="intro-divider"></div>
+      <div class="intro-sub">Your team has one patient today. Every decision matters. Every step must happen in the right order.</div>
+      <ul class="intro-rules">
+        <li>Read your persona card before you begin</li>
+        <li>Work together to decide the correct order</li>
+        <li>The Surgeon submits the team's final decision</li>
+        <li>If the order is wrong, a clue will help you realign</li>
+      </ul>
+      <input class="team-input" id="team-input" placeholder="Enter your table name or number (optional)">
+      <button class="start-btn" onclick="startSim()">Step into the OR →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     STAGE SCREEN
+════════════════════════════ -->
+<div class="screen" id="screen-stage">
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="hdr-title">One HR — Operating Room</div>
+      <div class="hdr-pt">Ms. Rivera, 52</div>
+    </div>
+    <div class="stage-bar">
+      <div class="sdot" id="sd1"></div>
+      <div class="sdot" id="sd2"></div>
+      <div class="sdot" id="sd3"></div>
+      <span class="stage-lbl" id="stage-lbl">Stage 1 of 3</span>
+    </div>
+  </div>
+
+  <div class="vitals-bar">
+    <div class="vt"><div class="vt-lbl">HR bpm</div><div class="vt-val v-warn" id="v-hr">88</div></div>
+    <div class="vt"><div class="vt-lbl">BP mmHg</div><div class="vt-val v-warn" id="v-bp">142/88</div></div>
+    <div class="vt"><div class="vt-lbl">SpO2 %</div><div class="vt-val v-ok" id="v-spo2">97</div></div>
+    <div class="vt"><div class="vt-lbl">RR /min</div><div class="vt-val v-ok" id="v-rr">16</div></div>
+    <div class="vt"><div class="vt-lbl">Temp</div><div class="vt-val v-ok" id="v-temp">98.6</div></div>
+  </div>
+
+  <div class="content">
+    <div class="stage-banner" id="stage-banner">
+      <div class="sb-num" id="stage-num">STAGE 1</div>
+      <h2 id="stage-title">PRE-OP</h2>
+    </div>
+
+    <div class="card">
+      <div class="card-lbl">Place the 5 steps in the correct order</div>
+      <div class="attempt-row" id="attempt-row">
+        Attempts: <span class="adot" id="ad0"></span><span class="adot" id="ad1"></span><span class="adot" id="ad2"></span><span class="adot" id="ad3"></span>
+      </div>
+      <div class="slots" id="slots"></div>
+      <div class="card-lbl" style="margin-top:14px;">Tap a card to place it — or drag it to a slot</div>
+      <div class="tiles-pool" id="tiles"></div>
+    </div>
+
+    <div class="feedback-box" id="fb">
+      <div class="fb-strong" id="fb-title"></div>
+      <div id="fb-body"></div>
+    </div>
+
+    <div class="reveal-box" id="reveal-box" style="display:none;">
+      <div class="reveal-hdr">
+        <p>ANSWER REVEALED</p>
+        <h3>Here is the correct order</h3>
+      </div>
+      <div class="reveal-body" id="reveal-body"></div>
+    </div>
+
+    <button class="btn-primary" id="submit-btn" onclick="submitSeq()" disabled>Submit sequence →</button>
+    <button class="btn-primary" id="next-btn" onclick="goNext()" style="display:none;margin-top:10px;">Continue →</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     INTERSTITIAL — TAKE ACTION
+════════════════════════════ -->
+<div class="interstitial" id="screen-action">
+  <div class="action-hero">
+    <div class="action-icon">📋</div>
+    <div class="action-title">Time to take action</div>
+    <div class="action-body" id="action-body">Open your ACTION cards and complete each step on Ms. Rivera in order. Work as a team to validate completion.</div>
+    <button class="action-btn" id="action-btn" onclick="afterAction()">My team has completed all steps →</button>
+  </div>
+</div>
+
+<!-- ════════════════════════════
+     SUMMARY SCREEN
+════════════════════════════ -->
+<div class="screen" id="screen-summary">
+  <div class="hdr">
+    <div class="hdr-top">
+      <div class="hdr-title">One HR — Operating Room</div>
+      <div class="hdr-pt" id="sum-team">Case Complete</div>
+    </div>
+    <div class="stage-bar">
+      <div class="sdot done"></div><div class="sdot done"></div><div class="sdot done"></div>
+      <span class="stage-lbl">Complete</span>
+    </div>
+  </div>
+  <div class="vitals-bar">
+    <div class="vt"><div class="vt-lbl">HR bpm</div><div class="vt-val v-ok">72</div></div>
+    <div class="vt"><div class="vt-lbl">BP mmHg</div><div class="vt-val v-ok">118/74</div></div>
+    <div class="vt"><div class="vt-lbl">SpO2 %</div><div class="vt-val v-ok">99</div></div>
+    <div class="vt"><div class="vt-lbl">RR /min</div><div class="vt-val v-ok">14</div></div>
+    <div class="vt"><div class="vt-lbl">Temp</div><div class="vt-val v-ok">98.5</div></div>
+  </div>
+  <div class="content">
+    <div class="summary-hero">
+      <div class="sum-icon" id="sum-icon">✓</div>
+      <div class="sum-title" id="sum-title">Case Complete</div>
+      <div class="sum-sub">Ms. Rivera's procedure is complete. Here is how your team performed.</div>
+      <div class="sum-time" id="sum-time">80 min</div>
+      <div class="sum-time-lbl">Estimated real-world case time</div>
+    </div>
+    <div class="outcome-card">
+      <div class="outcome-hdr" id="outcome-hdr">
+        <p>PATIENT OUTCOME</p>
+        <h3 id="outcome-title"></h3>
+      </div>
+      <div class="outcome-body" id="outcome-body"></div>
+    </div>
+    <div class="card">
+      <div class="card-lbl">Case breakdown</div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 1 — Pre-Op baseline</span><span class="br-val">15 min</span></div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 1 sequencing penalties</span><span class="br-val penalty" id="bp1">+0 min</span></div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 2 — Operation baseline</span><span class="br-val">45 min</span></div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 2 sequencing penalties</span><span class="br-val penalty" id="bp2">+0 min</span></div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 3 — Post-Op baseline</span><span class="br-val">20 min</span></div>
+      <div class="breakdown-row"><span class="br-lbl">Stage 3 sequencing penalties</span><span class="br-val penalty" id="bp3">+0 min</span></div>
+      <div class="breakdown-row" style="border-top:2px solid #e0e0e0;margin-top:4px;padding-top:12px;">
+        <span class="br-lbl" style="font-weight:700;color:var(--dark);font-size:15px;">Total case time</span>
+        <span class="br-val" id="btotal" style="font-size:17px;">80 min</span>
+      </div>
+    </div>
+    <div class="debrief-box">
+      <div class="debrief-lbl">Debrief question for your Observer</div>
+      <div class="debrief-q" id="debrief-q"></div>
+    </div>
+    <div style="text-align:center;padding:14px 0 4px;font-size:12px;color:var(--gray-lt);font-style:italic;">
+      Ms. Rivera's case is closed. Thank you for your work today.
+    </div>
+  </div>
+</div>
+
+<script>
+// ═══════════════════════════════
+// DATA
+// ═══════════════════════════════
+const STAGES = [
+  {
+    num:1, label:'STAGE 1', title:'PRE-OP', color:'#2D6A2A',
+    base:15, penalty:3,
+    correct:['Assess the patient','Stabilize patient','Prepare tools','Drape surgical area','Confirm team readiness'],
+    vitals:{
+      ok:  {hr:['88','v-warn'],  bp:['142/88','v-warn'], spo2:['97','v-ok'],  rr:['16','v-ok'],  temp:['98.6','v-ok']},
+      warn:{hr:['96','v-warn'],  bp:['150/94','v-warn'], spo2:['95','v-warn'], rr:['20','v-warn'], temp:['98.7','v-ok']},
+      crit:{hr:['110','v-crit'], bp:['160/100','v-crit'],spo2:['91','v-crit'], rr:['25','v-crit'], temp:['98.9','v-warn']},
+    }
+  },
+  {
+    num:2, label:'STAGE 2', title:'OPERATION', color:'#9C0006',
+    base:45, penalty:5,
+    correct:['Prepare tools','Clean the wound','Remove debris','Monitor patient','Close wound'],
+    vitals:{
+      ok:  {hr:['80','v-ok'],   bp:['128/82','v-warn'], spo2:['98','v-ok'],  rr:['15','v-ok'],  temp:['98.6','v-ok']},
+      warn:{hr:['96','v-warn'], bp:['144/90','v-warn'], spo2:['93','v-warn'], rr:['22','v-warn'], temp:['98.8','v-ok']},
+      crit:{hr:['118','v-crit'],bp:['86/54','v-crit'],  spo2:['89','v-crit'], rr:['27','v-crit'], temp:['99.2','v-warn']},
+    }
+  },
+  {
+    num:3, label:'STAGE 3', title:'POST-OP', color:'#1C4587',
+    base:20, penalty:3,
+    correct:['Confirm closure','Clean area and apply bandage','Account for tools','Check patient stability','Report out'],
+    vitals:{
+      ok:  {hr:['74','v-ok'],  bp:['120/76','v-ok'],  spo2:['99','v-ok'], rr:['14','v-ok'], temp:['98.5','v-ok']},
+      warn:{hr:['82','v-ok'],  bp:['126/80','v-ok'],  spo2:['97','v-ok'], rr:['16','v-ok'], temp:['98.6','v-ok']},
+      crit:{hr:['90','v-warn'],bp:['132/84','v-warn'], spo2:['96','v-ok'], rr:['18','v-ok'], temp:['98.7','v-ok']},
+    }
+  }
+];
+
+// Clues — keyed by "stageNum-actionText"
+const CLUES = {
+  // Stage 1
+  '1-Assess the patient':'Before anything else — does the team know what condition this patient is in? Ask your Nurse what they know first.',
+  '1-Stabilize patient':'The patient needs to be stabilized before tools come out. Has the Anesthesiologist confirmed readiness to proceed?',
+  '1-Prepare tools':'Tools come after the patient is stable — not before. Is there a step the Anesthesiologist still needs to complete?',
+  '1-Drape surgical area':'The drape goes on after tools are laid out. Has the Surgical Tech confirmed the setup is complete?',
+  '1-Confirm team readiness':'The Surgeon confirms last — not until every other role has spoken. Is the Scrub Nurse still waiting for a turn?',
+  // Stage 2
+  '2-Prepare tools':'Tools need to be in hand before anything touches the wound. Has the Nurse passed instruments yet?',
+  '2-Clean the wound':'The wound cannot be cleaned before instruments are in position. Is the Nurse ready with tools first?',
+  '2-Remove debris':'Debris is removed from a cleaned wound — not before saline has been used. Has cleaning happened yet?',
+  '2-Monitor patient':'Monitoring is a mid-procedure step — it belongs after the wound is open and work is active. Has the Anesthesiologist confirmed the right moment for this?',
+  '2-Close wound':'Closure is the last step. Has the Anesthesiologist cleared the patient before the Scrub Nurse closes?',
+  // Stage 3
+  '3-Confirm closure':'The Surgeon checks the work before anything covers it. Has that confirmation happened yet?',
+  '3-Clean area and apply bandage':'Cleaning and bandaging come after closure is confirmed. Is the Surgeon\'s check complete before this step?',
+  '3-Account for tools':'The tool count belongs after the bandage is on — before the patient is cleared. Has the Surgical Tech placed this in the right position?',
+  '3-Check patient stability':'The Anesthesiologist signs off after physical steps are done. Is the bandage on and tool count complete before this step?',
+  '3-Report out':'The Nurse hands off last — after every other step is done. Is anything still unfinished before this card is placed?'
+};
+
+const OUTCOMES = [
+  {max:85,  color:'#276221', title:'Excellent — Textbook Case',
+   body:'Ms. Rivera was in and out of the OR without complication. The team moved with precision and full alignment. Recovery begins immediately.',
+   debrief:'Your team completed this without significant missteps. In the debrief — what made alignment easy today? Where could that same discipline show up in your daily work together?'},
+  {max:95,  color:'#2D6A2A', title:'Strong — Minor Delays',
+   body:'Ms. Rivera\'s procedure was completed successfully. A small number of sequencing adjustments added time — but nothing that affected her outcome. The team recovered well.',
+   debrief:'The team got there — but not without some rework. What caused the hesitation? Who had the information that could have unlocked the right sequence faster?'},
+  {max:110, color:'#7F6000', title:'Completed — Avoidable Delays',
+   body:'Ms. Rivera is recovering — but this case took longer than it needed to. Several sequencing missteps added time on the table. The team had the knowledge. The challenge was using it together.',
+   debrief:'The right information was in the room. What got in the way of it being shared at the right moment? Who was waiting to be heard — and what stopped them?'},
+  {max:130, color:'#9C0006', title:'Completed — Significant Delays',
+   body:'Ms. Rivera made it through — but this case will be reviewed. Repeated misalignment added significant time and complexity to what should have been a routine procedure.',
+   debrief:'Where did the team stop listening to each other? What would a different decision at Stage 1 have changed for everything that followed?'},
+  {max:9999,color:'#53565A', title:'Completed — Case Under Review',
+   body:'Ms. Rivera is stable — but this case was far more complex than it needed to be. The team struggled to align across multiple stages. Something important needs to change.',
+   debrief:'Set the numbers aside. At what point did the team stop working together — and what did that feel like in the room? That moment is where the real conversation starts.'}
+];
+
+// ═══════════════════════════════
+// STATE
+// ═══════════════════════════════
+let G = {
+  stageIdx: 0,
+  teamName: '',
+  penalties: [0,0,0],
+  attempts: [0,0,0],
+  slots: [null,null,null,null,null],
+  outageArmed: false,
+  outageDone: false,
+  outageTimer: null,
+  countdownInterval: null,
+};
+
+// ═══════════════════════════════
+// AUDIO
+// ═══════════════════════════════
+let AC = null;
+function ctx(){
+  if(!AC) AC=new(window.AudioContext||window.webkitAudioContext)();
+  if(AC.state==='suspended') AC.resume();
+  return AC;
+}
+function tone(freq,start,dur,type='sine',vol=0.35){
+  const c=ctx(),o=c.createOscillator(),g=c.createGain();
+  o.type=type; o.frequency.setValueAtTime(freq,c.currentTime+start);
+  g.gain.setValueAtTime(0,c.currentTime+start);
+  g.gain.linearRampToValueAtTime(vol,c.currentTime+start+0.02);
+  g.gain.linearRampToValueAtTime(0,c.currentTime+start+dur);
+  o.connect(g); g.connect(c.destination);
+  o.start(c.currentTime+start); o.stop(c.currentTime+start+dur+0.05);
+}
+function sfxPowerDown(){
+  const c=ctx(),o=c.createOscillator(),g=c.createGain();
+  o.type='sawtooth';
+  o.frequency.setValueAtTime(440,c.currentTime);
+  o.frequency.exponentialRampToValueAtTime(38,c.currentTime+1.3);
+  g.gain.setValueAtTime(0.32,c.currentTime);
+  g.gain.linearRampToValueAtTime(0,c.currentTime+1.5);
+  o.connect(g); g.connect(c.destination);
+  o.start(c.currentTime); o.stop(c.currentTime+1.6);
+}
+function sfxAlarm(){
+  [0,.22,.44,.9,1.12,1.34,1.8,2.02,2.24,2.7,2.92,3.14,3.6,3.82,4.04,4.5,4.72,4.94,5.4,5.62,5.84,6.3,6.52].forEach(t=>tone(880,t,.16,'square',.28));
+}
+function sfxRestore(){
+  tone(440,0,.14,'sine',.3); tone(554,.18,.14,'sine',.3); tone(660,.36,.3,'sine',.35);
+}
+function sfxCorrect(){
+  tone(523,0,.12,'sine',.3); tone(659,.16,.12,'sine',.3); tone(784,.32,.28,'sine',.35);
+}
+function sfxWrong(){
+  tone(200,0,.22,'sawtooth',.25); tone(160,.28,.28,'sawtooth',.2);
+}
+// Wake audio on first touch
+['click','touchstart'].forEach(ev=>document.addEventListener(ev,()=>{ if(!AC) ctx(); },{once:true}));
+
+// ═══════════════════════════════
+// VITALS
+// ═══════════════════════════════
+function applyVitals(vObj){
+  const map={hr:'v-hr',bp:'v-bp',spo2:'v-spo2',rr:'v-rr',temp:'v-temp'};
+  Object.entries(map).forEach(([k,id])=>{
+    const el=document.getElementById(id);
+    if(!el||!vObj[k]) return;
+    el.textContent=vObj[k][0]; el.className='vt-val '+vObj[k][1];
+  });
+}
+function refreshVitals(){
+  const st=STAGES[G.stageIdx];
+  const a=G.attempts[G.stageIdx];
+  applyVitals(st.vitals[a>=3?'crit':a>=1?'warn':'ok']);
+}
+
+// ═══════════════════════════════
+// NAVIGATION
+// ═══════════════════════════════
+function showScreen(id){
+  document.querySelectorAll('.screen,.interstitial').forEach(s=>s.classList.remove('active'));
+  document.getElementById(id).classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function startSim(){
+  G={stageIdx:0,teamName:document.getElementById('team-input').value.trim()||'Team',
+     penalties:[0,0,0],attempts:[0,0,0],slots:[null,null,null,null,null],
+     outageArmed:false,outageDone:false,outageTimer:null,countdownInterval:null,
+     _dragSrc:null,_onRestoreCb:null,pendingResult:null};
+  showScreen('screen-stage');
+  renderStage();
+}
+
+function restartSim(){
+  if(G.outageTimer) clearTimeout(G.outageTimer);
+  if(G.countdownInterval) clearInterval(G.countdownInterval);
+  document.getElementById('team-input').value='';
+  showScreen('screen-intro');
+}
+
+// ═══════════════════════════════
+// RENDER STAGE
+// ═══════════════════════════════
+function renderStage(){
+  const st=STAGES[G.stageIdx];
+  G.slots=[null,null,null,null,null];
+
+  // Header dots
+  ['sd1','sd2','sd3'].forEach((id,i)=>{
+    const d=document.getElementById(id);
+    d.className='sdot'+(i<G.stageIdx?' done':i===G.stageIdx?' active':'');
+  });
+  document.getElementById('stage-lbl').textContent=`Stage ${G.stageIdx+1} of 3`;
+
+  // Banner
+  const banner=document.getElementById('stage-banner');
+  banner.style.background=st.color;
+  document.getElementById('stage-num').textContent=st.label;
+  document.getElementById('stage-title').textContent=st.title;
+
+  // Attempt dots
+  ['ad0','ad1','ad2','ad3'].forEach((id,i)=>{
+    const d=document.getElementById(id);
+    d.className='adot'+(i<G.attempts[G.stageIdx]?' used':'');
+  });
+
+  drawSlots(); drawTiles();
+
+  // Reset feedback and reveal
+  document.getElementById('fb').className='feedback-box';
+  document.getElementById('reveal-box').style.display='none';
+  document.getElementById('submit-btn').style.display='block';
+  document.getElementById('submit-btn').disabled=true;
+  document.getElementById('next-btn').style.display='none';
+
+  refreshVitals();
+}
+
+function drawSlots(){
+  const c=document.getElementById('slots');
+  c.innerHTML='';
+  for(let i=0;i<5;i++){
+    const s=document.createElement('div');
+    s.className='slot'+(G.slots[i]?' has-tile':'');
+    s.dataset.i=i;
+
+    // Drop handler — accepts from pool AND from other slots
+    s.addEventListener('dragover',e=>{ e.preventDefault(); });
+    s.addEventListener('dragenter',e=>{
+      e.preventDefault();
+      // Highlight differently if swapping two filled slots
+      const src=G._dragSrc;
+      if(src!==null && src!==undefined && G.slots[i]) s.classList.add('drag-over-swap');
+      else s.classList.add('drag-over');
+    });
+    s.addEventListener('dragleave',()=>{ s.classList.remove('drag-over'); s.classList.remove('drag-over-swap'); });
+    s.addEventListener('drop',e=>{
+      e.preventDefault();
+      s.classList.remove('drag-over'); s.classList.remove('drag-over-swap');
+      const srcType=e.dataTransfer.getData('src-type');
+      const text=e.dataTransfer.getData('text');
+      if(srcType==='slot'){
+        const fromIdx=parseInt(e.dataTransfer.getData('slot-idx'));
+        swapSlots(fromIdx, i);
+      } else {
+        if(text) placeCard(i, text);
+      }
+    });
+
+    const num=document.createElement('span');
+    num.className='slot-num'; num.textContent=i+1; s.appendChild(num);
+
+    if(G.slots[i]){
+      // Drag handle
+      const handle=document.createElement('span');
+      handle.className='slot-drag-handle'; handle.textContent='⠿';
+      handle.draggable=true;
+      handle.addEventListener('dragstart',e=>{
+        G._dragSrc=i;
+        e.dataTransfer.setData('src-type','slot');
+        e.dataTransfer.setData('slot-idx',String(i));
+        e.dataTransfer.setData('text',G.slots[i]);
+        s.style.opacity='.5';
+      });
+      handle.addEventListener('dragend',()=>{ s.style.opacity=''; G._dragSrc=null; });
+      s.appendChild(handle);
+
+      const lbl=document.createElement('span'); lbl.className='slot-label'; lbl.textContent=G.slots[i]; s.appendChild(lbl);
+      const x=document.createElement('button'); x.className='slot-x'; x.textContent='×';
+      x.onclick=()=>clearSlot(i); s.appendChild(x);
+    } else {
+      const e2=document.createElement('span'); e2.className='slot-empty'; e2.textContent='Drop or tap a card here'; s.appendChild(e2);
+    }
+    c.appendChild(s);
+  }
+}
+
+function swapSlots(fromIdx, toIdx){
+  if(fromIdx===toIdx) return;
+  const temp=G.slots[toIdx];
+  G.slots[toIdx]=G.slots[fromIdx];
+  G.slots[fromIdx]=temp;
+  drawSlots(); drawTiles();
+  document.getElementById('submit-btn').disabled=G.slots.includes(null);
+}
+
+function drawTiles(){
+  const pool=document.getElementById('tiles');
+  pool.innerHTML='';
+  const shuffled=[...STAGES[G.stageIdx].correct].sort(()=>Math.random()-.5);
+  shuffled.forEach(text=>{
+    const t=document.createElement('div');
+    const inUse=G.slots.includes(text);
+    t.className='tile'+(inUse?' used':'');
+    t.textContent=text; t.draggable=true; t.dataset.text=text;
+    t.addEventListener('dragstart',e=>{e.dataTransfer.setData('text',text);t.classList.add('dragging');});
+    t.addEventListener('dragend',()=>t.classList.remove('dragging'));
+    t.addEventListener('click',()=>{if(!inUse) tapCard(text);});
+    pool.appendChild(t);
+  });
+}
+
+function tapCard(text){
+  const empty=G.slots.indexOf(null);
+  if(empty===-1) return;
+  placeCard(empty,text);
+}
+
+function placeCard(idx,text){
+  // Remove from wherever it already is
+  const old=G.slots.indexOf(text);
+  if(old!==-1) G.slots[old]=null;
+  G.slots[idx]=text;
+  drawSlots(); drawTiles();
+  document.getElementById('submit-btn').disabled=G.slots.includes(null);
+}
+
+function clearSlot(idx){
+  G.slots[idx]=null;
+  drawSlots(); drawTiles();
+  document.getElementById('submit-btn').disabled=true;
+}
+
+// ═══════════════════════════════
+// SUBMIT
+// ═══════════════════════════════
+function submitSeq(){
+  const correct=STAGES[G.stageIdx].correct;
+  const ok=G.slots.every((v,i)=>v===correct[i]);
+  G.attempts[G.stageIdx]++;
+  ['ad0','ad1','ad2','ad3'].forEach((id,i)=>{
+    document.getElementById(id).className='adot'+(i<G.attempts[G.stageIdx]?' used':'');
+  });
+
+  // Stage 2 — trigger outage on FIRST submit, show result after power restores
+  if(G.stageIdx===1 && !G.outageArmed){
+    G.outageArmed=true;
+    G.pendingResult={ok,correct:ok};
+    if(!ok){ G.penalties[G.stageIdx]+=STAGES[G.stageIdx].penalty; refreshVitals(); }
+    startOutage(()=>{ if(ok){ onCorrect(); } else { sfxWrong(); onWrong(); } });
+    return;
+  }
+
+  if(ok){ onCorrect(); }
+  else { sfxWrong(); refreshVitals(); G.penalties[G.stageIdx]+=STAGES[G.stageIdx].penalty; onWrong(); }
+}
+
+function onCorrect(){
+  sfxCorrect();
+  applyVitals(STAGES[G.stageIdx].vitals.ok);
+  // Set the action button color to match next stage
+  const btn=document.getElementById('action-btn');
+  btn.style.color=G.stageIdx<2?STAGES[G.stageIdx+1].color:'#1C4587';
+  // Show the interstitial take-action screen
+  showInterstitial();
+}
+
+function onWrong(){
+  const correct=STAGES[G.stageIdx].correct;
+  const attemptNum=G.attempts[G.stageIdx];
+  const fb=document.getElementById('fb');
+
+  if(attemptNum===1){
+    // Attempt 1 — role-directed clue (existing behaviour)
+    let clueKey=null;
+    for(let i=0;i<G.slots.length;i++){
+      if(G.slots[i]!==correct[i]){ clueKey=`${G.stageIdx+1}-${G.slots[i]}`; break; }
+    }
+    const clue=CLUES[clueKey]||'The sequence isn\'t quite right. Talk through each step — who at this table has information that changes where a card belongs?';
+    fb.className='feedback-box fb-wrong show';
+    document.getElementById('fb-title').textContent='Not quite — check in with your team.';
+    document.getElementById('fb-body').textContent=clue;
+
+  } else if(attemptNum===2){
+    // Attempt 2 — stronger clue naming the most displaced step
+    // Find the step furthest from its correct position
+    let worstStep=null, worstDist=0;
+    G.slots.forEach((text,submittedIdx)=>{
+      if(!text) return;
+      const correctIdx=correct.indexOf(text);
+      const dist=Math.abs(correctIdx-submittedIdx);
+      if(dist>worstDist){ worstDist=dist; worstStep=text; }
+    });
+    const strongClues={
+      // Stage 1
+      'Assess the patient':'The team is still not starting in the right place. Assessing the patient is always Step 1 — nothing else can happen until the team knows what they are dealing with.',
+      'Stabilize patient':'Stabilizing the patient belongs earlier than where the team has placed it. The Anesthesiologist needs to act before tools are touched.',
+      'Prepare tools':'Tools come after the patient is stable — not before. Move this step later in the sequence.',
+      'Drape surgical area':'Draping is the last physical setup step — it happens after tools are laid out, just before the Surgeon confirms readiness.',
+      'Confirm team readiness':'Confirming readiness is the final step of Pre-Op. The Surgeon should be the last to speak, not the first.',
+      // Stage 2
+      'Prepare tools':'Preparing tools is the very first step of the operation — before anything touches the wound.',
+      'Clean the wound':'Cleaning the wound is Step 2 — saline goes on before any instruments enter the site.',
+      'Remove debris':'Debris is removed after the wound is clean — not before saline has been used.',
+      'Monitor patient':'Monitoring belongs in the middle of the procedure — after the wound is open and work is active, before closure begins.',
+      'Close wound':'Closing the wound is always last — the Anesthesiologist must clear the patient before the Scrub Nurse closes.',
+      // Stage 3
+      'Confirm closure':'Confirming closure is always first in Post-Op — the Surgeon checks the work before anything covers it.',
+      'Clean area and apply bandage':'Cleaning and bandaging happens right after closure is confirmed — Step 2.',
+      'Account for tools':'The tool count happens after the bandage is on — Step 3. It must be done before the patient is cleared.',
+      'Check patient stability':'The Anesthesiologist signs off after all physical steps are complete — this is Step 4, not earlier.',
+      'Report out':'Report out is always last. The Nurse hands off only when every other step is done.',
+    };
+    const stronger=strongClues[worstStep]||'One step is significantly out of place. Look at which step is furthest from where it should be and talk through why the order matters.';
+    fb.className='feedback-box fb-wrong show';
+    document.getElementById('fb-title').textContent='Still not right — here\'s a stronger clue.';
+    document.getElementById('fb-body').textContent=stronger;
+
+  } else {
+    // Attempt 3+ — reveal the answer with harsh penalty
+    G.penalties[G.stageIdx]+=15; // harsh reveal penalty on top of existing
+    document.getElementById('fb').className='feedback-box';
+    showReveal(correct);
+  }
+}
+
+function showReveal(correct){
+  const box=document.getElementById('reveal-box');
+  const body=document.getElementById('reveal-body');
+  box.style.display='block';
+  body.innerHTML='';
+  correct.forEach((step,i)=>{
+    const row=document.createElement('div');
+    row.className='reveal-step';
+    const num=document.createElement('span'); num.className='reveal-num'; num.textContent=i+1;
+    const txt=document.createElement('span'); txt.className='reveal-text'; txt.textContent=step;
+    row.appendChild(num); row.appendChild(txt); body.appendChild(row);
+  });
+  const note=document.createElement('div');
+  note.className='reveal-note';
+  note.textContent='Here is the correct order — take a moment to understand as a team why this matters before you continue.';
+  body.appendChild(note);
+  // Show continue button
+  document.getElementById('submit-btn').style.display='none';
+  const nb=document.getElementById('next-btn');
+  nb.style.display='block';
+  nb.style.background=G.stageIdx<2?STAGES[G.stageIdx+1].color:'#1C4587';
+  nb.textContent='We understand — continue →';
+  // Set slots to correct so next tap goes to interstitial not another wrong
+  G.slots=[...correct];
+  refreshVitals();
+}
+
+function showInterstitial(){
+  // Show the take-action interstitial screen
+  document.querySelectorAll('.screen,.interstitial').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-action').classList.add('active');
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function afterAction(){
+  // Team confirmed physical steps done — advance to next stage or summary
+  document.querySelectorAll('.screen,.interstitial').forEach(s=>s.classList.remove('active'));
+  document.getElementById('screen-stage').classList.add('active');
+  if(G.stageIdx<2){ G.stageIdx++; renderStage(); }
+  else showSummary();
+  window.scrollTo({top:0,behavior:'smooth'});
+}
+
+function goNext(){
+  // Called from "We understand" button after reveal
+  showInterstitial();
+}
+
+// ═══════════════════════════════
+// POWER OUTAGE
+// ═══════════════════════════════
+function startOutage(onRestoreCallback){
+  if(G.outageDone) return;
+  ctx();
+  sfxPowerDown();
+  G._onRestoreCb = onRestoreCallback || null;
+  setTimeout(()=>{
+    document.getElementById('outage-overlay').classList.add('show');
+    setTimeout(sfxAlarm, 1800);
+    let secs=90;
+    const timerEl=document.getElementById('outage-timer');
+    G.countdownInterval=setInterval(()=>{
+      secs--;
+      timerEl.textContent=`${Math.floor(secs/60)}:${String(secs%60).padStart(2,'0')}`;
+      if(secs<=0){ clearInterval(G.countdownInterval); endOutage(); }
+    },1000);
+  }, 850);
+}
+
+function endOutage(){
+  G.outageDone=true;
+  sfxRestore();
+  const restore=document.getElementById('power-restore');
+  restore.classList.add('show');
+  document.getElementById('outage-timer').style.visibility='hidden';
+  setTimeout(()=>{
+    document.getElementById('outage-overlay').classList.remove('show');
+    restore.classList.remove('show');
+    document.getElementById('outage-timer').style.visibility='visible';
+    document.getElementById('outage-timer').textContent='1:30';
+    // Fire the pending result callback
+    if(G._onRestoreCb){ G._onRestoreCb(); G._onRestoreCb=null; }
+  },3200);
+}
+
+// ═══════════════════════════════
+// SUMMARY
+// ═══════════════════════════════
+function showSummary(){
+  if(G.outageTimer) clearTimeout(G.outageTimer);
+  const p=G.penalties;
+  const t1=15+p[0], t2=45+p[1], t3=20+p[2];
+  const total=t1+t2+t3;
+  const tier=OUTCOMES.find(o=>total<=o.max)||OUTCOMES[OUTCOMES.length-1];
+
+  document.getElementById('sum-icon').textContent=total<=95?'✓':total<=115?'⚠':'⚠';
+  document.getElementById('sum-title').textContent=tier.title;
+  document.getElementById('sum-time').textContent=`${total} min`;
+  document.getElementById('sum-team').textContent=G.teamName;
+  document.getElementById('outcome-hdr').style.background=tier.color;
+  document.getElementById('outcome-title').textContent=tier.title;
+  document.getElementById('outcome-body').textContent=tier.body;
+
+  const fmt=(v,a)=>v>0?`+${v} min (${a} attempt${a!==1?'s':''})`:`+0 min`;
+  document.getElementById('bp1').textContent=fmt(p[0],G.attempts[0]);
+  document.getElementById('bp2').textContent=fmt(p[1],G.attempts[1]);
+  document.getElementById('bp3').textContent=fmt(p[2],G.attempts[2]);
+  document.getElementById('btotal').textContent=`${total} min`;
+  ['bp1','bp2','bp3'].forEach((id,i)=>{
+    document.getElementById(id).className='br-val'+(p[i]>0?' penalty':'');
+  });
+  document.getElementById('debrief-q').textContent=tier.debrief;
+  showScreen('screen-summary');
+}
+</script>
+</body>
+</html>
